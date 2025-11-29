@@ -175,8 +175,7 @@ app.post('/messages/update-sync-status', async (c) => {
       return c.json({ error: 'Missing vaultId or messageIds' }, 400);
     }
 
-    // userIDが特定のユーザー以外アクセスできないようにする
-    if (!userId || userId !== c.env.LINE_USER_ID) {
+    if (!userId) {
       return c.json({ error: 'Missing userId' }, 400);
     }
 
@@ -250,6 +249,11 @@ app.post('/webhook', async (c) => {
           (async () => {
             const message = await buildLineMessage({ event, env: c.env });
             if (!message) return;
+
+            if (message.userId !== c.env.LINE_USER_ID) {
+              console.error(`unauthorized user: ${message.userId}`);
+              return;
+            }
 
             await c.env.LINE_MESSAGES.put(
               `${message.vaultId}/${message.userId}/${message.messageId}`,
