@@ -10,7 +10,7 @@ const { MessagingApiClient } = messagingApi;
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { fetchArticleMarkdown, isUrlOnly } from './lib/url-markdown-collector';
+import { fetchArticleSummary, isUrlOnly } from './lib/url-markdown-collector';
 
 type LineMessage = {
   timestamp: number;
@@ -27,6 +27,7 @@ type LineMessage = {
     author?: string;
     image?: string;
     markdown: string;
+    tags?: string[];
   };
 };
 
@@ -343,7 +344,7 @@ async function buildLineMessage({
   const articleResult = urlOnly
     ? await (async () => {
         try {
-          return await fetchArticleMarkdown({
+          return await fetchArticleSummary({
             url: text.trim(),
             env,
           });

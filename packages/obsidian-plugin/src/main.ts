@@ -64,6 +64,7 @@ interface LineMessage {
     author?: string;
     image?: string;
     markdown: string;
+    tags?: string[];
   };
 }
 

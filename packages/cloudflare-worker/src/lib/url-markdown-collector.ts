@@ -1,4 +1,5 @@
 import Cloudflare from 'cloudflare';
+import { generateArticleSummaryPrompt } from './prompts';
 
 /**
  * メッセージテキストがURL単体かどうかを判定
@@ -130,4 +131,94 @@ export async function fetchArticleMarkdown({
     image,
     markdown,
   };
+}
+
+/**
+ * URLから記事の要約とタグを取得する。
+ *
+ * @param params - 取得パラメータ
+ * @param params.url - 記事URL
+ * @param params.env - Cloudflare Worker環境変数
+ * @returns 記事情報（url, title, 要約, tags等）、エラー時はnull
+ *
+ * @example
+ * await fetchArticleSummary({ url: 'https://example.com', env });
+ */
+export async function fetchArticleSummary({
+  url,
+  env,
+}: {
+  url: string;
+  env: Env;
+}): Promise<{
+  url: string;
+  title: string;
+  description?: string;
+  author?: string;
+  image?: string;
+  markdown: string;
+  tags?: string[];
+} | null> {
+  try {
+    // 1. HTML取得とOGPメタデータ抽出
+    const htmlResponse = await fetch(url);
+    if (!htmlResponse.ok) {
+      return null;
+    }
+    const html = await htmlResponse.text();
+
+    const title = extractTitle(html);
+    const description = extractOgpMeta(html, 'og:description');
+    const author = extractOgpMeta(html, 'article:author');
+    const image = extractOgpMeta(html, 'og:image');
+
+    // 2. Browser Rendering JSON API で要約とタグを取得
+    const client = new Cloudflare({
+      apiToken: env.CLOUDFLARE_API_TOKEN,
+    });
+
+    const result = await client.browserRendering.json.create({
+      account_id: env.CLOUDFLARE_ACCOUNT_ID,
+      url,
+      prompt: generateArticleSummaryPrompt(),
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          type: 'object',
+          properties: {
+            summary: {
+              type: 'string',
+              minLength: 300,
+            },
+            tags: {
+              type: 'array',
+              maxItems: 5,
+              items: {
+                type: 'string',
+                pattern: '^[A-Z][a-zA-Z0-9]*$|^[ぁ-んァ-ヶー一-龯]+$',
+              },
+            },
+          },
+          required: ['summary', 'tags'],
+          additionalProperties: false,
+        },
+      },
+    });
+
+    // 3. レスポンスから要約とタグを抽出
+    const { summary, tags } = result as { summary: string; tags: string[] };
+
+    return {
+      url,
+      title,
+      description,
+      author,
+      image,
+      markdown: summary,
+      tags,
+    };
+  } catch (error) {
+    console.error('Error generating article summary:', error);
+    return null;
+  }
 }
