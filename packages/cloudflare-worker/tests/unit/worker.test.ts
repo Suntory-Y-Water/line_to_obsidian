@@ -296,7 +296,7 @@ describe('Cloudflare Worker', () => {
       expect(mockKVNamespace.put).toHaveBeenCalledWith(
         'vault1/user1/msg1',
         JSON.stringify({ ...mockMessage, synced: true }),
-        { expirationTtl: 60 * 60 * 24 * 10 },
+        { expirationTtl: 60 * 60 * 24 * 3 },
       );
       expect(mockContext.json).toHaveBeenCalledWith({
         status: 'ok',

@@ -255,7 +255,7 @@ app.post('/webhook', async (c) => {
             await c.env.LINE_MESSAGES.put(
               `${message.vaultId}/${message.userId}/${message.messageId}`,
               JSON.stringify(message),
-              { expirationTtl: 60 * 60 * 24 * 10 },
+              { expirationTtl: 60 * 60 * 24 * 3 },
             );
           })(),
         );

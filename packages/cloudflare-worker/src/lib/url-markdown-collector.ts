@@ -1,4 +1,5 @@
 import Cloudflare from 'cloudflare';
+import { sanitizeForFrontmatter } from './frontmatter-sanitizer';
 import { generateArticleSummaryPrompt } from './prompts';
 
 /**
@@ -210,9 +211,11 @@ export async function fetchArticleSummary({
 
     return {
       url,
-      title,
-      description,
-      author,
+      title: sanitizeForFrontmatter(title),
+      description: description
+        ? sanitizeForFrontmatter(description)
+        : undefined,
+      author: author ? sanitizeForFrontmatter(author) : undefined,
       image,
       markdown: summary,
       tags,

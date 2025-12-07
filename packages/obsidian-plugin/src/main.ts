@@ -10,6 +10,7 @@ import {
   type ToggleComponent,
 } from 'obsidian';
 import { API_ENDPOINTS } from './constants';
+import { formatTimestampToJST } from './date-format';
 
 interface LinePluginSettings {
   noteFolderPath: string;
@@ -156,53 +157,39 @@ export default class LinePlugin extends Plugin {
     this.setupAutoSync();
   }
 
-  private toJST(timestamp: number): Date {
-    return new Date(timestamp);
-  }
-
   private getJSTDateString(timestamp: number): string {
-    const jstDate = this.toJST(timestamp);
-    return jstDate.toISOString().split('T')[0].replace(/-/g, '');
+    const jstISO = formatTimestampToJST(timestamp);
+    // "2025-12-07T15:30:00+09:00" から "20251207" を取得
+    return jstISO.slice(0, 10).replace(/-/g, '');
   }
 
   private getJSTDateWithHyphens(timestamp: number): string {
-    const jstDate = this.toJST(timestamp);
-    return jstDate.toISOString().split('T')[0];
+    const jstISO = formatTimestampToJST(timestamp);
+    // "2025-12-07T15:30:00+09:00" から "2025-12-07" を取得
+    return jstISO.slice(0, 10);
   }
 
   private getJSTISOString(timestamp: number): string {
-    const jstDate = this.toJST(timestamp);
-    return jstDate.toISOString();
+    const result = formatTimestampToJST(timestamp);
+    return result;
   }
 
   private getJSTTimeForFileName(timestamp: number): string {
-    const jstDate = this.toJST(timestamp);
-    const year = jstDate.getFullYear();
-    const month = String(jstDate.getMonth() + 1).padStart(2, '0');
-    const day = String(jstDate.getDate()).padStart(2, '0');
-    const hour = String(jstDate.getHours()).padStart(2, '0');
-    const minute = String(jstDate.getMinutes()).padStart(2, '0');
-    const second = String(jstDate.getSeconds()).padStart(2, '0');
-
-    return `${year}${month}${day}${hour}${minute}${second}`;
+    const jstISO = formatTimestampToJST(timestamp);
+    // "2025-12-07T15:30:00+09:00" から "20251207153000" を取得
+    return jstISO.slice(0, 19).replace(/[-:T]/g, '');
   }
 
   private getTimeOnly(timestamp: number): string {
-    const jstDate = this.toJST(timestamp);
-    const hour = String(jstDate.getHours()).padStart(2, '0');
-    const minute = String(jstDate.getMinutes()).padStart(2, '0');
-    const second = String(jstDate.getSeconds()).padStart(2, '0');
-
-    return `${hour}${minute}${second}`;
+    const jstISO = formatTimestampToJST(timestamp);
+    // "2025-12-07T15:30:00+09:00" から "153000" を取得
+    return jstISO.slice(11, 19).replace(/:/g, '');
   }
 
   public getJSTTimeString(timestamp: number): string {
-    const jstDate = this.toJST(timestamp);
-    const hour = String(jstDate.getHours()).padStart(2, '0');
-    const minute = String(jstDate.getMinutes()).padStart(2, '0');
-    const second = String(jstDate.getSeconds()).padStart(2, '0');
-
-    return `${hour}:${minute}:${second}`;
+    const jstISO = formatTimestampToJST(timestamp);
+    // "2025-12-07T15:30:00+09:00" から "15:30:00" を取得
+    return jstISO.slice(11, 19);
   }
 
   private generateFileName(message: LineMessage): string {
@@ -428,8 +415,7 @@ export default class LinePlugin extends Plugin {
             // Append new messages to existing content or create new file
             let finalContent: string;
             if (existingContent) {
-              finalContent =
-                existingContent.trimEnd() + '\n' + newMessages.join('\n');
+              finalContent = `${existingContent.trimEnd()}\n${newMessages.join('\n')}`;
             } else {
               // Create new file with frontmatter
               const parsedFrontmatter = parseFrontmatterTemplate(
