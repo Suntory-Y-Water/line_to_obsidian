@@ -13,17 +13,17 @@
     "version": "node version-bump.mjs && git add manifest.json versions.json"
   },
   "devDependencies": {
-    "@types/node": "^24.10.1",
-    "@vitest/coverage-v8": "^4.0.14",
-    "@vitest/ui": "^4.0.14",
+    "@types/node": "^24.13.3",
+    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/ui": "^4.1.10",
     "builtin-modules": "5.0.0",
-    "dotenv": "^17.2.3",
+    "dotenv": "^17.4.2",
     "esbuild": "0.27.0",
-    "jsdom": "^27.2.0",
-    "obsidian": "^1.10.3",
+    "jsdom": "^27.4.0",
+    "obsidian": "^1.13.1",
     "tslib": "2.8.1",
     "typescript": "5.9.3",
-    "vitest": "^4.0.14"
+    "vitest": "^4.1.10"
   },
   "dependencies": {
     "@date-fns/tz": "^1.4.1",

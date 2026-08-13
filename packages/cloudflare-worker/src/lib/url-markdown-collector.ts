@@ -2,17 +2,6 @@ import Cloudflare from 'cloudflare';
 import { sanitizeForFrontmatter } from './frontmatter-sanitizer';
 import { generateArticleSummaryPrompt } from './prompts';
 
-/**
- * メッセージテキストがURL単体かどうかを判定
- *
- * @param text - 判定対象のテキスト
- * @returns URL単体の場合true、それ以外false
- *
- * @example
- * isUrlOnly('https://example.com') // true
- * isUrlOnly('https://example.com\nhttps://example.org') // false
- * isUrlOnly('Check this https://example.com') // false
- */
 export function isUrlOnly(text: string): boolean {
   const trimmed = text.trim();
   if (trimmed.includes('\n') || trimmed.includes(' ')) return false;
@@ -27,16 +16,6 @@ export function isUrlOnly(text: string): boolean {
   }
 }
 
-/**
- * HTMLからOGPメタタグの値を抽出
- *
- * @param html - HTML文字列
- * @param property - OGPプロパティ名（例: og:title, og:description）
- * @returns 抽出された値、見つからない場合undefined
- *
- * @example
- * extractOgpMeta('<meta property="og:title" content="Example">', 'og:title') // 'Example'
- */
 export function extractOgpMeta(
   html: string,
   property: string,
@@ -49,16 +28,6 @@ export function extractOgpMeta(
   return match?.[1];
 }
 
-/**
- * HTMLからタイトルを抽出（OGP優先、フォールバック: titleタグ）
- *
- * @param html - HTML文字列
- * @returns タイトル文字列、見つからない場合空文字
- *
- * @example
- * extractTitle('<meta property="og:title" content="Example">') // 'Example'
- * extractTitle('<title>Fallback Title</title>') // 'Fallback Title'
- */
 function extractTitle(html: string): string {
   const ogTitle = extractOgpMeta(html, 'og:title');
   if (ogTitle) return ogTitle;
@@ -67,20 +36,6 @@ function extractTitle(html: string): string {
   return titleMatch ? titleMatch[1] : '';
 }
 
-/**
- * URLからMarkdown本文と記事メタデータを取得
- *
- * @param params - 取得パラメータ
- * @param params.url - 記事URL
- * @param params.env - Cloudflare Worker環境変数
- * @returns 記事情報（url, title, markdown等）、エラー時はnull
- *
- * @example
- * const article = await fetchArticleMarkdown({ url: 'https://example.com', env });
- * if (article) {
- *   console.log(article.title, article.markdown);
- * }
- */
 export async function fetchArticleMarkdown({
   url,
   env,
