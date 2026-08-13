@@ -26,8 +26,10 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
+    "@date-fns/tz": "^1.5.0",
     "buffer": "^6.0.3",
     "crypto-browserify": "^3.12.1",
+    "date-fns": "^4.4.0",
     "stream-browserify": "^3.0.0"
   }
 }

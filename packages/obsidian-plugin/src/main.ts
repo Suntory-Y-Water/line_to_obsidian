@@ -10,6 +10,8 @@ import {
   type ToggleComponent,
 } from 'obsidian';
 import { API_ENDPOINTS } from './constants';
+import { formatTimestampToJST } from './date-format';
+import { buildLiteratureFileBaseName } from './slugify';
 
 interface LinePluginSettings {
   noteFolderPath: string;
@@ -91,21 +93,6 @@ function parseFrontmatterTemplate(
     .replace(/{datecompact}/g, dateString);
 }
 
-/**
- * タイトル文字列をファイル名用のslugに変換する
- * 日本語や特殊文字を含むタイトルをASCII文字列に変換し、ファイル名として使用可能にする
- */
-function slugify(text: string, maxLength = 50): string {
-  return text
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_]+/g, '-') // スペースとアンダースコアをハイフンに置換
-    .replace(/[^\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF-]/g, '') // 英数字、日本語、ハイフン以外を削除
-    .replace(/--+/g, '-') // 連続するハイフンを1つに
-    .replace(/^-+|-+$/g, '') // 先頭と末尾のハイフンを削除
-    .substring(0, maxLength); // 最大長で切り詰め
-}
-
 export default class LinePlugin extends Plugin {
   settings: LinePluginSettings;
   syncIntervalId: number | null = null;
@@ -155,53 +142,33 @@ export default class LinePlugin extends Plugin {
     this.setupAutoSync();
   }
 
-  private toJST(timestamp: number): Date {
-    return new Date(timestamp);
-  }
-
   private getJSTDateString(timestamp: number): string {
-    const jstDate = this.toJST(timestamp);
-    return jstDate.toISOString().split('T')[0].replace(/-/g, '');
+    const jstISO = formatTimestampToJST(timestamp);
+    return jstISO.slice(0, 10).replace(/-/g, '');
   }
 
   private getJSTDateWithHyphens(timestamp: number): string {
-    const jstDate = this.toJST(timestamp);
-    return jstDate.toISOString().split('T')[0];
+    const jstISO = formatTimestampToJST(timestamp);
+    return jstISO.slice(0, 10);
   }
 
   private getJSTISOString(timestamp: number): string {
-    const jstDate = this.toJST(timestamp);
-    return jstDate.toISOString();
+    return formatTimestampToJST(timestamp);
   }
 
   private getJSTTimeForFileName(timestamp: number): string {
-    const jstDate = this.toJST(timestamp);
-    const year = jstDate.getFullYear();
-    const month = String(jstDate.getMonth() + 1).padStart(2, '0');
-    const day = String(jstDate.getDate()).padStart(2, '0');
-    const hour = String(jstDate.getHours()).padStart(2, '0');
-    const minute = String(jstDate.getMinutes()).padStart(2, '0');
-    const second = String(jstDate.getSeconds()).padStart(2, '0');
-
-    return `${year}${month}${day}${hour}${minute}${second}`;
+    const jstISO = formatTimestampToJST(timestamp);
+    return jstISO.slice(0, 19).replace(/[-:T]/g, '');
   }
 
   private getTimeOnly(timestamp: number): string {
-    const jstDate = this.toJST(timestamp);
-    const hour = String(jstDate.getHours()).padStart(2, '0');
-    const minute = String(jstDate.getMinutes()).padStart(2, '0');
-    const second = String(jstDate.getSeconds()).padStart(2, '0');
-
-    return `${hour}${minute}${second}`;
+    const jstISO = formatTimestampToJST(timestamp);
+    return jstISO.slice(11, 19).replace(/:/g, '');
   }
 
   public getJSTTimeString(timestamp: number): string {
-    const jstDate = this.toJST(timestamp);
-    const hour = String(jstDate.getHours()).padStart(2, '0');
-    const minute = String(jstDate.getMinutes()).padStart(2, '0');
-    const second = String(jstDate.getSeconds()).padStart(2, '0');
-
-    return `${hour}:${minute}:${second}`;
+    const jstISO = formatTimestampToJST(timestamp);
+    return jstISO.slice(11, 19);
   }
 
   private generateFileName(message: LineMessage): string {
@@ -591,8 +558,11 @@ export default class LinePlugin extends Plugin {
         await this.app.vault.createFolder(folderPath);
       }
 
-      // ファイル名生成（タイトルをスラッグ化）
-      const baseFileName = slugify(article.title);
+      // ファイル名生成(タイトルをスラッグ化)
+      const baseFileName = buildLiteratureFileBaseName(
+        article.title,
+        article.url,
+      );
       const fileName = `${baseFileName}.md`;
 
       // 重複チェック
@@ -737,7 +707,7 @@ class LineSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName('Vault ID')
       .setDesc(
-        'このObsidian Vault用の一意の識別子（任意のユニークなIDを作成してください）',
+        'このObsidian Vault用の一意の識別子(任意のユニークなIDを作成してください)',
       )
       .addText((text) =>
         text
@@ -764,7 +734,7 @@ class LineSettingTab extends PluginSettingTab {
 
     const syncIntervalSetting = new Setting(containerEl)
       .setName('Sync interval')
-      .setDesc('LINEメッセージを同期する間隔（時間単位）')
+      .setDesc('LINEメッセージを同期する間隔(時間単位)')
       .addDropdown((dropdown) => {
         const hours = [1, 2, 3, 4, 5];
         hours.forEach((hour) => {
@@ -813,7 +783,7 @@ class LineSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName('Organize by date')
       .setDesc(
-        '日付ごとにフォルダを作成してメッセージを整理するかどうか（注意：「Group messages by date」をオンにすると自動的にオフになりますが、手動で再度オンにすることができます）',
+        '日付ごとにフォルダを作成してメッセージを整理するかどうか(注意：「Group messages by date」をオンにすると自動的にオフになりますが、手動で再度オンにすることができます)',
       )
       .addToggle((toggle) => {
         organizeBydateToggle = toggle;
@@ -831,7 +801,7 @@ class LineSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName('Group messages by date')
       .setDesc(
-        '同じ日付のメッセージを1つのファイルにまとめるかどうか（チェックを外すとメッセージごとに個別のファイルを作成）',
+        '同じ日付のメッセージを1つのファイルにまとめるかどうか(チェックを外すとメッセージごとに個別のファイルを作成)',
       )
       .addToggle((toggle) =>
         toggle
@@ -886,7 +856,7 @@ class LineSettingTab extends PluginSettingTab {
     const frontmatterTemplateSetting = new Setting(containerEl)
       .setName('Grouped message frontmatter template')
       .setDesc(
-        '日付でグループ化されたファイルのフロントマター\n利用可能な変数: {date} - 日付, {datecompact} - 日付（ハイフンなし）',
+        '日付でグループ化されたファイルのフロントマター\n利用可能な変数: {date} - 日付, {datecompact} - 日付(ハイフンなし)',
       )
       .addTextArea((text) => {
         text
@@ -911,7 +881,7 @@ class LineSettingTab extends PluginSettingTab {
     const groupedFileNameSetting = new Setting(containerEl)
       .setName('Grouped file name template')
       .setDesc(
-        '日付ごとにまとめられたファイルの名前（「Group messages by date」がオンの場合に使用）\n利用可能な変数: {date} - 日付 (例: 2024-01-15), {datecompact} - 日付ハイフンなし (例: 20240115)',
+        '日付ごとにまとめられたファイルの名前(「Group messages by date」がオンの場合に使用)\n利用可能な変数: {date} - 日付 (例: 2024-01-15), {datecompact} - 日付ハイフンなし (例: 20240115)',
       )
       .addText((text) =>
         text
@@ -944,7 +914,7 @@ class LineSettingTab extends PluginSettingTab {
     });
     infoBox.createEl('br');
     infoBox.createEl('span', {
-      text: '  ※ 固定のファイル名（例：{date}を使わずに「LINE-Messages」など）を設定すると、すべてのメッセージが常に同じファイルに追記されます',
+      text: '  ※ 固定のファイル名(例：{date}を使わずに「LINE-Messages」など)を設定すると、すべてのメッセージが常に同じファイルに追記されます',
     });
     infoBox.createEl('br');
     infoBox.createEl('span', { text: '• ' });
@@ -956,7 +926,7 @@ class LineSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName('Individual message file name template')
       .setDesc(
-        '個別メッセージファイルのファイル名テンプレート（「Group messages by date」がオフの場合に使用）\n利用可能な変数: {date}, {datecompact}, {time}, {datetime}, {messageId}, {userId}, {timestamp}',
+        '個別メッセージファイルのファイル名テンプレート(「Group messages by date」がオフの場合に使用)\n利用可能な変数: {date}, {datecompact}, {time}, {datetime}, {messageId}, {userId}, {timestamp}',
       )
       .addText((text) =>
         text
@@ -976,7 +946,7 @@ class LineSettingTab extends PluginSettingTab {
     containerEl.createEl('ul', {}, (ul) => {
       ul.createEl('li', { text: '{date}: 日付 (例: 2024-01-15)' });
       ul.createEl('li', {
-        text: '{datecompact}: 日付（ハイフンなし） (例: 20240115)',
+        text: '{datecompact}: 日付(ハイフンなし) (例: 20240115)',
       });
       ul.createEl('li', { text: '{time}: 時刻 (例: 103045)' });
       ul.createEl('li', { text: '{datetime}: 日時 (例: 20240115103045)' });
@@ -1039,7 +1009,7 @@ class LineSettingTab extends PluginSettingTab {
       ul.createEl('li', { text: '{title}: 記事タイトル' });
       ul.createEl('li', { text: '{url}: 記事URL' });
       ul.createEl('li', { text: '{author}: 著者名' });
-      ul.createEl('li', { text: '{created}: 作成日時（ISO形式）' });
+      ul.createEl('li', { text: '{created}: 作成日時(ISO形式)' });
       ul.createEl('li', { text: '{description}: 記事説明' });
       ul.createEl('li', { text: '{image}: 記事画像URL' });
     });

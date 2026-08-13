@@ -30,7 +30,7 @@ type LineMessage = {
   };
 };
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<{ Bindings: CloudflareBindings }>();
 
 app.use(
   '*',
@@ -312,7 +312,7 @@ async function buildLineMessage({
   env,
 }: {
   event: MessageEvent & { message: TextEventMessage };
-  env: Env;
+  env: CloudflareBindings;
 }): Promise<LineMessage | null> {
   const userId = event.source.userId;
   if (!userId) {

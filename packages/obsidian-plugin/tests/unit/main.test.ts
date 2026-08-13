@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LinePlugin from '../../src/main';
 
 // Obsidian APIのモック
@@ -51,7 +51,6 @@ describe('LinePlugin', () => {
         vaultId: '',
         lineUserId: '',
         autoSync: false,
-        e2eeEnabled: true,
         syncInterval: 2,
         syncOnStartup: false,
         organizeByDate: false,
@@ -60,6 +59,10 @@ describe('LinePlugin', () => {
         groupedFileNameTemplate: '{date}',
         groupedFrontmatterTemplate: 'source: LINE\ndate: {date}',
         groupedMessageTemplate: '{time}: {text}',
+        enableArticleExtraction: true,
+        literatureNoteFolder: 'LINE/Literature',
+        literatureNoteFrontmatterTemplate:
+          'title: {title}\nsource: {url}\nauthor: {author}\ncreated: {created}\ndescription: {description}\nimage: {image}\ntags: [literature, line]',
       });
     });
 
@@ -76,7 +79,6 @@ describe('LinePlugin', () => {
         vaultId: 'test-vault',
         lineUserId: '',
         autoSync: true,
-        e2eeEnabled: true,
         syncInterval: 2,
         syncOnStartup: false,
         organizeByDate: false,
@@ -85,6 +87,10 @@ describe('LinePlugin', () => {
         groupedFileNameTemplate: '{date}',
         groupedFrontmatterTemplate: 'source: LINE\ndate: {date}',
         groupedMessageTemplate: '{time}: {text}',
+        enableArticleExtraction: true,
+        literatureNoteFolder: 'LINE/Literature',
+        literatureNoteFrontmatterTemplate:
+          'title: {title}\nsource: {url}\nauthor: {author}\ncreated: {created}\ndescription: {description}\nimage: {image}\ntags: [literature, line]',
       });
     });
   });
