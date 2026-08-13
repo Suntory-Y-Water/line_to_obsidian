@@ -67,6 +67,25 @@ export function resolveTitle({
   return extractHost(url);
 }
 
+/**
+ * Browser Rendering は Markdown の先頭に title と meta を持つ frontmatter を付けて返す。
+ * Obsidian 側でも frontmatter を組み立てるため、残すと二重定義になる。
+ *
+ * 本文冒頭の水平線を frontmatter と誤認しないよう、区切り線の中身が
+ * `キー:` の形をしていることまで確認する。
+ */
+export function stripLeadingFrontmatter(markdown: string): string {
+  const match = markdown.match(/^\s*---\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/);
+  if (!match) return markdown;
+
+  const hasYamlKey = match[1]
+    .split(/\r?\n/)
+    .some((line) => /^[A-Za-z_"'][^:]*:/.test(line));
+  if (!hasYamlKey) return markdown;
+
+  return markdown.slice(match[0].length).trimStart();
+}
+
 export async function fetchArticleMarkdown({
   url,
   env,
@@ -83,9 +102,9 @@ export async function fetchArticleMarkdown({
     fetch: fetchImpl,
   });
 
-  let markdown: string;
+  let rawMarkdown: string;
   try {
-    markdown = await client.browserRendering.markdown.create({
+    rawMarkdown = await client.browserRendering.markdown.create({
       account_id: env.CLOUDFLARE_ACCOUNT_ID,
       url,
       rejectResourceTypes: ['stylesheet', 'image', 'media', 'font'],
@@ -103,6 +122,7 @@ export async function fetchArticleMarkdown({
     return null;
   }
 
+  const markdown = stripLeadingFrontmatter(rawMarkdown);
   if (!markdown.trim()) {
     return null;
   }

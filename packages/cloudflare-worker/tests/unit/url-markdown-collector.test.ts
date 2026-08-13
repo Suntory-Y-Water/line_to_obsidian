@@ -4,6 +4,7 @@ import {
   fetchArticleMarkdown,
   isUrlOnly,
   resolveTitle,
+  stripLeadingFrontmatter,
 } from '../../src/lib/url-markdown-collector';
 
 const CLOUDFLARE_API_ORIGIN = 'https://api.cloudflare.com';
@@ -171,6 +172,64 @@ describe('OGPメタデータの抽出', () => {
   });
 });
 
+describe('先頭frontmatterの除去', () => {
+  it('Browser Renderingが付けたfrontmatterで始まる時、その部分が除かれること', () => {
+    const markdown = [
+      '---',
+      'title: Webサービスの終わらせ方',
+      'meta:',
+      '  "og:title": Webサービスの終わらせ方',
+      '---',
+      '',
+      '## 作るより消すほうが大変',
+      '',
+      '本文です',
+    ].join('\n');
+
+    expect(stripLeadingFrontmatter(markdown)).toBe(
+      '## 作るより消すほうが大変\n\n本文です',
+    );
+  });
+
+  it('frontmatterの前に空行がある時も、その部分が除かれること', () => {
+    const markdown = '\n\n---\ntitle: 記事\n---\n\n本文です';
+
+    expect(stripLeadingFrontmatter(markdown)).toBe('本文です');
+  });
+
+  it('frontmatterが無い時、本文がそのまま返ること', () => {
+    const markdown = '# 記事タイトル\n\n本文です';
+
+    expect(stripLeadingFrontmatter(markdown)).toBe(
+      '# 記事タイトル\n\n本文です',
+    );
+  });
+
+  it('本文の途中に水平線がある時、そこは除かれないこと', () => {
+    const markdown = '# 記事タイトル\n\n前半\n\n---\n\n後半';
+
+    expect(stripLeadingFrontmatter(markdown)).toBe(
+      '# 記事タイトル\n\n前半\n\n---\n\n後半',
+    );
+  });
+
+  it('先頭が水平線でその後にYAMLらしき行が無い時、除かれないこと', () => {
+    const markdown = '---\n\n本文です\n\n---\n\n続き';
+
+    expect(stripLeadingFrontmatter(markdown)).toBe(
+      '---\n\n本文です\n\n---\n\n続き',
+    );
+  });
+
+  it('閉じの区切り線が無い時、除かれないこと', () => {
+    const markdown = '---\ntitle: 記事\n\n本文です';
+
+    expect(stripLeadingFrontmatter(markdown)).toBe(
+      '---\ntitle: 記事\n\n本文です',
+    );
+  });
+});
+
 describe('記事タイトルの決定', () => {
   it('og:titleがある時、その値が使われること', () => {
     const html =
@@ -272,6 +331,37 @@ describe('記事の取得', () => {
         image: undefined,
         markdown: '# 記事タイトル\n\n本文です',
       });
+    });
+
+    it('本文がfrontmatterで始まる時、それを除いた本文が返ること', async () => {
+      const fetchImpl = createFetchStub({
+        html: '<meta property="og:title" content="記事タイトル">',
+        markdown:
+          '---\ntitle: 記事タイトル\nmeta:\n  "og:title": 記事タイトル\n---\n\n## 見出し\n\n本文です',
+      });
+
+      const result = await fetchArticleMarkdown({
+        url: 'https://example.com/notes/1234',
+        env: createEnv(),
+        fetchImpl,
+      });
+
+      expect(result?.markdown).toBe('## 見出し\n\n本文です');
+    });
+
+    it('frontmatterを除くと本文が空になる時、記事は作られないこと', async () => {
+      const fetchImpl = createFetchStub({
+        html: '<meta property="og:title" content="記事タイトル">',
+        markdown: '---\ntitle: 記事タイトル\n---\n',
+      });
+
+      const result = await fetchArticleMarkdown({
+        url: 'https://example.com/notes/1234',
+        env: createEnv(),
+        fetchImpl,
+      });
+
+      expect(result).toBeNull();
     });
 
     it('HTML取得のリクエストにUser-Agentが付与されること', async () => {
