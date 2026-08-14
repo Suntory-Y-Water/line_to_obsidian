@@ -343,10 +343,7 @@ async function buildLineMessage({
   const articleResult = urlOnly
     ? await (async () => {
         try {
-          return await fetchArticleMarkdown({
-            url: text.trim(),
-            env,
-          });
+          return await fetchArticleMarkdown({ url: text.trim() });
         } catch {
           return null;
         }

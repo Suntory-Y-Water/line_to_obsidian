@@ -4,62 +4,33 @@ import {
   fetchArticleMarkdown,
   isUrlOnly,
   resolveTitle,
-  stripLeadingFrontmatter,
 } from '../../src/lib/url-markdown-collector';
 
-const CLOUDFLARE_API_ORIGIN = 'https://api.cloudflare.com';
-
-function createEnv(): CloudflareBindings {
-  return {
-    CLOUDFLARE_API_TOKEN: 'test-token',
-    CLOUDFLARE_ACCOUNT_ID: 'test-account',
-  } as CloudflareBindings;
+function buildArticleHtml({
+  head = '',
+  body = '<article><h1>記事タイトル</h1><p>本文です。段落として認識される程度の長さを持たせています。</p></article>',
+}: {
+  head?: string;
+  body?: string;
+} = {}): string {
+  return `<!DOCTYPE html><html><head>${head}</head><body>${body}</body></html>`;
 }
 
-/**
- * Cloudflare SDK は import 時に fetch を捕まえるため global.fetch の差し替えが効かない。
- * HTML 取得と Browser Rendering の両方をこのスタブ1つで賄い、宛先で振り分ける。
- */
 function createFetchStub({
-  html,
-  htmlStatus = 200,
-  htmlThrows = false,
-  markdown = '# 見出し\n\n本文',
-  markdownStatus = 200,
+  html = buildArticleHtml(),
+  status = 200,
+  throws = false,
 }: {
   html?: string;
-  htmlStatus?: number;
-  htmlThrows?: boolean;
-  markdown?: string;
-  markdownStatus?: number;
-}) {
-  return vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input.toString();
-
-    if (url.startsWith(CLOUDFLARE_API_ORIGIN)) {
-      if (markdownStatus !== 200) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            errors: [{ code: 1, message: 'ng' }],
-          }),
-          {
-            status: markdownStatus,
-            headers: { 'content-type': 'application/json' },
-          },
-        );
-      }
-      return new Response(JSON.stringify({ success: true, result: markdown }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-
-    if (htmlThrows) {
+  status?: number;
+  throws?: boolean;
+} = {}) {
+  return vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+    if (throws) {
       throw new TypeError('Network error');
     }
-    return new Response(html ?? '', {
-      status: htmlStatus,
+    return new Response(html, {
+      status,
       headers: { 'content-type': 'text/html' },
     });
   });
@@ -172,64 +143,6 @@ describe('OGPメタデータの抽出', () => {
   });
 });
 
-describe('先頭frontmatterの除去', () => {
-  it('Browser Renderingが付けたfrontmatterで始まる時、その部分が除かれること', () => {
-    const markdown = [
-      '---',
-      'title: Webサービスの終わらせ方',
-      'meta:',
-      '  "og:title": Webサービスの終わらせ方',
-      '---',
-      '',
-      '## 作るより消すほうが大変',
-      '',
-      '本文です',
-    ].join('\n');
-
-    expect(stripLeadingFrontmatter(markdown)).toBe(
-      '## 作るより消すほうが大変\n\n本文です',
-    );
-  });
-
-  it('frontmatterの前に空行がある時も、その部分が除かれること', () => {
-    const markdown = '\n\n---\ntitle: 記事\n---\n\n本文です';
-
-    expect(stripLeadingFrontmatter(markdown)).toBe('本文です');
-  });
-
-  it('frontmatterが無い時、本文がそのまま返ること', () => {
-    const markdown = '# 記事タイトル\n\n本文です';
-
-    expect(stripLeadingFrontmatter(markdown)).toBe(
-      '# 記事タイトル\n\n本文です',
-    );
-  });
-
-  it('本文の途中に水平線がある時、そこは除かれないこと', () => {
-    const markdown = '# 記事タイトル\n\n前半\n\n---\n\n後半';
-
-    expect(stripLeadingFrontmatter(markdown)).toBe(
-      '# 記事タイトル\n\n前半\n\n---\n\n後半',
-    );
-  });
-
-  it('先頭が水平線でその後にYAMLらしき行が無い時、除かれないこと', () => {
-    const markdown = '---\n\n本文です\n\n---\n\n続き';
-
-    expect(stripLeadingFrontmatter(markdown)).toBe(
-      '---\n\n本文です\n\n---\n\n続き',
-    );
-  });
-
-  it('閉じの区切り線が無い時、除かれないこと', () => {
-    const markdown = '---\ntitle: 記事\n\n本文です';
-
-    expect(stripLeadingFrontmatter(markdown)).toBe(
-      '---\ntitle: 記事\n\n本文です',
-    );
-  });
-});
-
 describe('記事タイトルの決定', () => {
   it('og:titleがある時、その値が使われること', () => {
     const html =
@@ -237,6 +150,7 @@ describe('記事タイトルの決定', () => {
 
     const result = resolveTitle({
       html,
+      extractedTitle: '抽出タイトル',
       markdown: '# 本文の見出し',
       url: 'https://example.com/notes/1234',
     });
@@ -244,7 +158,20 @@ describe('記事タイトルの決定', () => {
     expect(result).toBe('OGPタイトル');
   });
 
-  it('og:titleが無くtitleタグがある時、titleタグの値が使われること', () => {
+  it('og:titleが無く抽出結果のタイトルがある時、その値が使われること', () => {
+    const html = '<title>タグのタイトル</title>';
+
+    const result = resolveTitle({
+      html,
+      extractedTitle: '抽出タイトル',
+      markdown: '# 本文の見出し',
+      url: 'https://example.com/notes/1234',
+    });
+
+    expect(result).toBe('抽出タイトル');
+  });
+
+  it('og:titleも抽出結果も無くtitleタグがある時、titleタグの値が使われること', () => {
     const html = '<title>タグのタイトル</title>';
 
     const result = resolveTitle({
@@ -256,7 +183,7 @@ describe('記事タイトルの決定', () => {
     expect(result).toBe('タグのタイトル');
   });
 
-  it('og:titleもtitleタグも無い時、本文の先頭見出しが使われること', () => {
+  it('HTML由来の候補が無い時、本文の先頭見出しが使われること', () => {
     const result = resolveTitle({
       html: '<html><body>本文だけ</body></html>',
       markdown: '本文の書き出し\n\n## 本文の見出し\n\n続き',
@@ -268,7 +195,7 @@ describe('記事タイトルの決定', () => {
 
   it('先頭見出しも無い時、URLのパス末尾が使われること', () => {
     const result = resolveTitle({
-      html: null,
+      html: '',
       markdown: '見出しのない本文',
       url: 'https://example.com/notes/1234',
     });
@@ -278,7 +205,7 @@ describe('記事タイトルの決定', () => {
 
   it('パス末尾に拡張子が付いている時、拡張子を除いた名前が使われること', () => {
     const result = resolveTitle({
-      html: null,
+      html: '',
       markdown: '見出しのない本文',
       url: 'https://example.com/notes/1234.html',
     });
@@ -288,7 +215,7 @@ describe('記事タイトルの決定', () => {
 
   it('パスを持たないURLの時、ホスト名が使われること', () => {
     const result = resolveTitle({
-      html: null,
+      html: '',
       markdown: '見出しのない本文',
       url: 'https://example.com/',
     });
@@ -301,6 +228,7 @@ describe('記事タイトルの決定', () => {
 
     const result = resolveTitle({
       html,
+      extractedTitle: '  ',
       markdown: '#    \n',
       url: 'https://example.com/',
     });
@@ -311,65 +239,33 @@ describe('記事タイトルの決定', () => {
 
 describe('記事の取得', () => {
   describe('正常系', () => {
-    it('HTMLと本文の両方が取得できた時、タイトルと本文を含む記事が返ること', async () => {
+    it('HTMLが取得できた時、タイトルと本文とOGP情報を含む記事が返ること', async () => {
       const fetchImpl = createFetchStub({
-        html: '<meta property="og:title" content="記事タイトル"><meta property="og:description" content="記事の説明">',
-        markdown: '# 記事タイトル\n\n本文です',
+        html: buildArticleHtml({
+          head: '<meta property="og:title" content="記事タイトル"><meta property="og:description" content="記事の説明"><meta property="og:image" content="https://example.com/cover.png">',
+        }),
       });
 
       const result = await fetchArticleMarkdown({
         url: 'https://example.com/notes/1234',
-        env: createEnv(),
         fetchImpl,
       });
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         url: 'https://example.com/notes/1234',
         title: '記事タイトル',
         description: '記事の説明',
         author: undefined,
-        image: undefined,
-        markdown: '# 記事タイトル\n\n本文です',
+        image: 'https://example.com/cover.png',
       });
+      expect(result?.markdown).toContain('本文です');
     });
 
-    it('本文がfrontmatterで始まる時、それを除いた本文が返ること', async () => {
-      const fetchImpl = createFetchStub({
-        html: '<meta property="og:title" content="記事タイトル">',
-        markdown:
-          '---\ntitle: 記事タイトル\nmeta:\n  "og:title": 記事タイトル\n---\n\n## 見出し\n\n本文です',
-      });
-
-      const result = await fetchArticleMarkdown({
-        url: 'https://example.com/notes/1234',
-        env: createEnv(),
-        fetchImpl,
-      });
-
-      expect(result?.markdown).toBe('## 見出し\n\n本文です');
-    });
-
-    it('frontmatterを除くと本文が空になる時、記事は作られないこと', async () => {
-      const fetchImpl = createFetchStub({
-        html: '<meta property="og:title" content="記事タイトル">',
-        markdown: '---\ntitle: 記事タイトル\n---\n',
-      });
-
-      const result = await fetchArticleMarkdown({
-        url: 'https://example.com/notes/1234',
-        env: createEnv(),
-        fetchImpl,
-      });
-
-      expect(result).toBeNull();
-    });
-
-    it('HTML取得のリクエストにUser-Agentが付与されること', async () => {
-      const fetchImpl = createFetchStub({ html: '<title>タイトル</title>' });
+    it('リクエストにUser-Agentが付与されること', async () => {
+      const fetchImpl = createFetchStub();
 
       await fetchArticleMarkdown({
         url: 'https://example.com/notes/1234',
-        env: createEnv(),
         fetchImpl,
       });
 
@@ -379,12 +275,13 @@ describe('記事の取得', () => {
 
     it('タイトルにコロンが含まれる時、frontmatterを壊さない文字列に整形されること', async () => {
       const fetchImpl = createFetchStub({
-        html: '<meta property="og:title" content="速報: Rust 2.0 リリース">',
+        html: buildArticleHtml({
+          head: '<meta property="og:title" content="速報: Rust 2.0 リリース">',
+        }),
       });
 
       const result = await fetchArticleMarkdown({
         url: 'https://example.com/notes/1234',
-        env: createEnv(),
         fetchImpl,
       });
 
@@ -393,12 +290,13 @@ describe('記事の取得', () => {
 
     it('説明文に改行が含まれる時、frontmatterを壊さない文字列に整形されること', async () => {
       const fetchImpl = createFetchStub({
-        html: '<meta property="og:description" content="1行目\n2行目">',
+        html: buildArticleHtml({
+          head: '<meta property="og:description" content="1行目\n2行目">',
+        }),
       });
 
       const result = await fetchArticleMarkdown({
         url: 'https://example.com/notes/1234',
-        env: createEnv(),
         fetchImpl,
       });
 
@@ -406,78 +304,36 @@ describe('記事の取得', () => {
     });
   });
 
-  describe('OGPの取得に失敗した場合', () => {
-    it('HTML取得が403で失敗した時も、本文を含む記事が返ること', async () => {
-      const fetchImpl = createFetchStub({
-        htmlStatus: 403,
-        markdown: '# 記事タイトル\n\n本文です',
-      });
+  describe('取得に失敗した場合', () => {
+    it('403が返った時、記事は作られないこと', async () => {
+      const fetchImpl = createFetchStub({ status: 403 });
 
       const result = await fetchArticleMarkdown({
         url: 'https://example.com/notes/1234',
-        env: createEnv(),
-        fetchImpl,
-      });
-
-      expect(result?.markdown).toBe('# 記事タイトル\n\n本文です');
-    });
-
-    it('HTML取得が通信エラーになった時も、本文を含む記事が返ること', async () => {
-      const fetchImpl = createFetchStub({
-        htmlThrows: true,
-        markdown: '# 記事タイトル\n\n本文です',
-      });
-
-      const result = await fetchArticleMarkdown({
-        url: 'https://example.com/notes/1234',
-        env: createEnv(),
-        fetchImpl,
-      });
-
-      expect(result?.markdown).toBe('# 記事タイトル\n\n本文です');
-    });
-
-    it('HTML取得に失敗した時、タイトルは本文の先頭見出しから決まること', async () => {
-      const fetchImpl = createFetchStub({
-        htmlStatus: 403,
-        markdown: '# 記事タイトル\n\n本文です',
-      });
-
-      const result = await fetchArticleMarkdown({
-        url: 'https://example.com/notes/1234',
-        env: createEnv(),
-        fetchImpl,
-      });
-
-      expect(result?.title).toBe('記事タイトル');
-    });
-  });
-
-  describe('本文の取得に失敗した場合', () => {
-    it('Browser Renderingがエラーを返した時、記事は作られないこと', async () => {
-      const fetchImpl = createFetchStub({
-        html: '<title>タイトル</title>',
-        markdownStatus: 500,
-      });
-
-      const result = await fetchArticleMarkdown({
-        url: 'https://example.com/notes/1234',
-        env: createEnv(),
         fetchImpl,
       });
 
       expect(result).toBeNull();
     });
 
-    it('Browser Renderingが空文字を返した時、記事は作られないこと', async () => {
+    it('通信エラーになった時、記事は作られないこと', async () => {
+      const fetchImpl = createFetchStub({ throws: true });
+
+      const result = await fetchArticleMarkdown({
+        url: 'https://example.com/notes/1234',
+        fetchImpl,
+      });
+
+      expect(result).toBeNull();
+    });
+
+    it('本文を抽出できなかった時、記事は作られないこと', async () => {
       const fetchImpl = createFetchStub({
-        html: '<title>タイトル</title>',
-        markdown: '   ',
+        html: buildArticleHtml({ body: '' }),
       });
 
       const result = await fetchArticleMarkdown({
         url: 'https://example.com/notes/1234',
-        env: createEnv(),
         fetchImpl,
       });
 

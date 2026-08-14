@@ -1,9 +1,11 @@
-import Cloudflare from 'cloudflare';
+import { extractMarkdown } from './article-extractor';
 import { sanitizeForFrontmatter } from './frontmatter-sanitizer';
 
-// OGP を返さないサイトが Bot 判定で 403 を返すため、通常のブラウザとして名乗る
+// Bot 判定で 403 を返すサイトがあるため、通常のブラウザとして名乗る。
+// マイナー以下を 0.0.0 にし、macOS のバージョンを 10_15_7 に固定するのは
+// Chrome 自身の User-Agent 削減と同じ形にするため
 const USER_AGENT =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36';
 
 type Article = {
   url: string;
@@ -45,16 +47,19 @@ export function extractOgpMeta(
 
 export function resolveTitle({
   html,
+  extractedTitle,
   markdown,
   url,
 }: {
-  html: string | null;
+  html: string;
+  extractedTitle?: string;
   markdown: string;
   url: string;
 }): string {
   const candidates = [
-    html ? extractOgpMeta(html, 'og:title') : undefined,
-    html ? extractHtmlTitle(html) : undefined,
+    extractOgpMeta(html, 'og:title'),
+    extractedTitle,
+    extractHtmlTitle(html),
     extractFirstHeading(markdown),
     extractPathTail(url),
   ];
@@ -67,80 +72,39 @@ export function resolveTitle({
   return extractHost(url);
 }
 
-/**
- * Browser Rendering は Markdown の先頭に title と meta を持つ frontmatter を付けて返す。
- * Obsidian 側でも frontmatter を組み立てるため、残すと二重定義になる。
- *
- * 本文冒頭の水平線を frontmatter と誤認しないよう、区切り線の中身が
- * `キー:` の形をしていることまで確認する。
- */
-export function stripLeadingFrontmatter(markdown: string): string {
-  const match = markdown.match(/^\s*---\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/);
-  if (!match) return markdown;
-
-  const hasYamlKey = match[1]
-    .split(/\r?\n/)
-    .some((line) => /^[A-Za-z_"'][^:]*:/.test(line));
-  if (!hasYamlKey) return markdown;
-
-  return markdown.slice(match[0].length).trimStart();
-}
-
 export async function fetchArticleMarkdown({
   url,
-  env,
   fetchImpl = globalThis.fetch,
 }: {
   url: string;
-  env: CloudflareBindings;
   fetchImpl?: typeof fetch;
 }): Promise<Article | null> {
   const html = await fetchHtml({ url, fetchImpl });
+  if (html === null) return null;
 
-  const client = new Cloudflare({
-    apiToken: env.CLOUDFLARE_API_TOKEN,
-    fetch: fetchImpl,
-  });
+  const extracted = await extractMarkdown({ html, url });
+  if (!extracted) return null;
 
-  let rawMarkdown: string;
-  try {
-    rawMarkdown = await client.browserRendering.markdown.create({
-      account_id: env.CLOUDFLARE_ACCOUNT_ID,
-      url,
-      rejectResourceTypes: ['stylesheet', 'image', 'media', 'font'],
-      rejectRequestPattern: [
-        '/^.*\\.(css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot)$/',
-      ],
-      addScriptTag: [
-        {
-          content: `document.querySelectorAll('aside, header, footer').forEach(el => el.remove());`,
-        },
-      ],
-    });
-  } catch (err) {
-    console.error(`Browser Rendering failed for ${url}:`, err);
-    return null;
-  }
-
-  const markdown = stripLeadingFrontmatter(rawMarkdown);
-  if (!markdown.trim()) {
-    return null;
-  }
-
-  const description = html ? extractOgpMeta(html, 'og:description') : undefined;
-  const author = html ? extractOgpMeta(html, 'article:author') : undefined;
+  const description = extractOgpMeta(html, 'og:description');
+  const author = extractOgpMeta(html, 'article:author');
 
   return {
     url,
-    title: sanitizeForFrontmatter(resolveTitle({ html, markdown, url })),
+    title: sanitizeForFrontmatter(
+      resolveTitle({
+        html,
+        extractedTitle: extracted.title,
+        markdown: extracted.markdown,
+        url,
+      }),
+    ),
     description: description ? sanitizeForFrontmatter(description) : undefined,
     author: author ? sanitizeForFrontmatter(author) : undefined,
-    image: html ? extractOgpMeta(html, 'og:image') : undefined,
-    markdown,
+    image: extractOgpMeta(html, 'og:image'),
+    markdown: extracted.markdown,
   };
 }
 
-// OGP はあくまで補助情報なので、取得できなくても Browser Rendering には進む
 async function fetchHtml({
   url,
   fetchImpl,
@@ -152,7 +116,10 @@ async function fetchHtml({
     const response = await fetchImpl(url, {
       headers: { 'User-Agent': USER_AGENT },
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.error(`Failed to fetch ${url}: HTTP ${response.status}`);
+      return null;
+    }
     return await response.text();
   } catch (err) {
     console.error(`Failed to fetch HTML for ${url}:`, err);
