@@ -6,7 +6,7 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "obsidian-plugin-cloudflare-worker",
 	"main": "src/worker.ts",
-	"compatibility_date": "2025-11-28",
+	"compatibility_date": "2025-08-01",
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
