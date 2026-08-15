@@ -11,7 +11,8 @@ import {
 } from 'obsidian';
 import { API_ENDPOINTS } from './constants';
 import { formatTimestampToJST } from './date-format';
-import { buildLiteratureFileBaseName } from './slugify';
+import { buildLiteratureFileBaseName } from './literature-file-name';
+import { buildLiteratureFrontmatter } from './literature-frontmatter';
 
 interface LinePluginSettings {
   noteFolderPath: string;
@@ -48,7 +49,7 @@ const DEFAULT_SETTINGS: LinePluginSettings = {
   enableArticleExtraction: true,
   literatureNoteFolder: 'LINE/Literature',
   literatureNoteFrontmatterTemplate:
-    'title: {title}\nsource: {url}\nauthor: {author}\ncreated: {created}\ndescription: {description}\nimage: {image}\ntags: [literature, line]',
+    'title: {title}\nsource: {url}\nauthor: {author}\npublished: {published}\ncreated: {created}\ndescription: {description}\nimage: {image}\ntags: [literature, line]',
 };
 
 interface LineMessage {
@@ -64,6 +65,7 @@ interface LineMessage {
     title: string;
     description?: string;
     author?: string;
+    published?: string;
     image?: string;
     markdown: string;
   };
@@ -546,6 +548,7 @@ export default class LinePlugin extends Plugin {
       title: string;
       description?: string;
       author?: string;
+      published?: string;
       image?: string;
       markdown: string;
     },
@@ -580,14 +583,11 @@ export default class LinePlugin extends Plugin {
       }
 
       // Frontmatterテンプレート処理
-      const createdISO = this.getJSTISOString(message.timestamp);
-      const frontmatter = this.settings.literatureNoteFrontmatterTemplate
-        .replace(/{title}/g, article.title)
-        .replace(/{url}/g, article.url)
-        .replace(/{author}/g, article.author || '')
-        .replace(/{created}/g, createdISO)
-        .replace(/{description}/g, article.description || '')
-        .replace(/{image}/g, article.image || '');
+      const frontmatter = buildLiteratureFrontmatter({
+        template: this.settings.literatureNoteFrontmatterTemplate,
+        article,
+        created: this.getJSTISOString(message.timestamp),
+      });
 
       // ファイル内容生成
       const content = ['---', frontmatter, '---', '', article.markdown].join(
@@ -990,13 +990,12 @@ class LineSettingTab extends PluginSettingTab {
       .addTextArea((text) =>
         text
           .setPlaceholder(
-            'title: {title}\nsource: {url}\nauthor: {author}\ncreated: {created}',
+            'title: {title}\nsource: {url}\nauthor: {author}\npublished: {published}\ncreated: {created}',
           )
           .setValue(this.plugin.settings.literatureNoteFrontmatterTemplate)
           .onChange(async (value) => {
             this.plugin.settings.literatureNoteFrontmatterTemplate =
-              value ||
-              'title: {title}\nsource: {url}\nauthor: {author}\ncreated: {created}\ndescription: {description}\nimage: {image}\ntags: [literature, line]';
+              value || DEFAULT_SETTINGS.literatureNoteFrontmatterTemplate;
             await this.plugin.saveSettings();
           }),
       );

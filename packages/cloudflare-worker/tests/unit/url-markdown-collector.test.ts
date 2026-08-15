@@ -158,6 +158,33 @@ describe('記事タイトルの決定', () => {
     expect(result).toBe('OGPタイトル');
   });
 
+  it('Xの投稿の時、og:titleより本文の先頭見出しが優先されること', () => {
+    const html =
+      '<meta property="og:title" content="まつにぃ (@yugen_matuni) on X">';
+
+    const result = resolveTitle({
+      html,
+      extractedTitle: 'まつにぃ (@yugen_matuni) on X',
+      markdown: '- ## 記事の見出し\n\t本文の書き出し',
+      url: 'https://x.com/yugen_matuni/status/2088251220452679951?s=46',
+    });
+
+    expect(result).toBe('記事の見出し');
+  });
+
+  it('Xの投稿で本文が見出しから始まらない時、og:titleが使われること', () => {
+    const html =
+      '<meta property="og:title" content="まつにぃ (@yugen_matuni) on X">';
+
+    const result = resolveTitle({
+      html,
+      markdown: 'ただのつぶやき\n\n## 途中の見出し',
+      url: 'https://x.com/yugen_matuni/status/2088251220452679951',
+    });
+
+    expect(result).toBe('まつにぃ (@yugen_matuni) on X');
+  });
+
   it('og:titleが無く抽出結果のタイトルがある時、その値が使われること', () => {
     const html = '<title>タグのタイトル</title>';
 
@@ -273,10 +300,10 @@ describe('記事の取得', () => {
       expect(new Headers(init?.headers).get('user-agent')).toMatch(/Mozilla/);
     });
 
-    it('タイトルにコロンが含まれる時、frontmatterを壊さない文字列に整形されること', async () => {
+    it('タイトルに記号や全角スペースが含まれる時、そのまま残ること', async () => {
       const fetchImpl = createFetchStub({
         html: buildArticleHtml({
-          head: '<meta property="og:title" content="速報: Rust 2.0 リリース">',
+          head: '<meta property="og:title" content="速報: 『プライベート･ライアン』　3～…">',
         }),
       });
 
@@ -285,7 +312,37 @@ describe('記事の取得', () => {
         fetchImpl,
       });
 
-      expect(result?.title).toBe('速報： Rust 2.0 リリース');
+      expect(result?.title).toBe('速報: 『プライベート･ライアン』　3～…');
+    });
+
+    it('著者がプロフィールURLで書かれている時、末尾のセグメントが著者名になること', async () => {
+      const fetchImpl = createFetchStub({
+        html: buildArticleHtml({
+          head: '<meta property="article:author" content="https://x.com/yugen_matuni">',
+        }),
+      });
+
+      const result = await fetchArticleMarkdown({
+        url: 'https://example.com/notes/1234',
+        fetchImpl,
+      });
+
+      expect(result?.author).toBe('yugen_matuni');
+    });
+
+    it('公開日時のメタタグがある時、記事に含まれること', async () => {
+      const fetchImpl = createFetchStub({
+        html: buildArticleHtml({
+          head: '<meta property="article:published_time" content="2026-08-14T07:01:00+09:00">',
+        }),
+      });
+
+      const result = await fetchArticleMarkdown({
+        url: 'https://example.com/notes/1234',
+        fetchImpl,
+      });
+
+      expect(result?.published).toBe('2026-08-14T07:01:00+09:00');
     });
 
     it('説明文に改行が含まれる時、frontmatterを壊さない文字列に整形されること', async () => {

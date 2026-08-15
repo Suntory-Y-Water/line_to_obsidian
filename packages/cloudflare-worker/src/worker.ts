@@ -25,6 +25,7 @@ type LineMessage = {
     title: string;
     description?: string;
     author?: string;
+    published?: string;
     image?: string;
     markdown: string;
   };

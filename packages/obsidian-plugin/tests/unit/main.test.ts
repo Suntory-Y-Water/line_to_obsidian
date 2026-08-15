@@ -62,7 +62,7 @@ describe('LinePlugin', () => {
         enableArticleExtraction: true,
         literatureNoteFolder: 'LINE/Literature',
         literatureNoteFrontmatterTemplate:
-          'title: {title}\nsource: {url}\nauthor: {author}\ncreated: {created}\ndescription: {description}\nimage: {image}\ntags: [literature, line]',
+          'title: {title}\nsource: {url}\nauthor: {author}\npublished: {published}\ncreated: {created}\ndescription: {description}\nimage: {image}\ntags: [literature, line]',
       });
     });
 
@@ -90,7 +90,7 @@ describe('LinePlugin', () => {
         enableArticleExtraction: true,
         literatureNoteFolder: 'LINE/Literature',
         literatureNoteFrontmatterTemplate:
-          'title: {title}\nsource: {url}\nauthor: {author}\ncreated: {created}\ndescription: {description}\nimage: {image}\ntags: [literature, line]',
+          'title: {title}\nsource: {url}\nauthor: {author}\npublished: {published}\ncreated: {created}\ndescription: {description}\nimage: {image}\ntags: [literature, line]',
       });
     });
   });

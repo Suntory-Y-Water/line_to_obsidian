@@ -1,5 +1,14 @@
 import { DOMParser, parseHTML } from 'linkedom';
 
+export type ExtractedArticle = {
+  title: string;
+  markdown: string;
+  description?: string;
+  author?: string;
+  published?: string;
+  image?: string;
+};
+
 /**
  * defuddle が同梱する turndown はブラウザ向けビルドで、読み込み時に window.DOMParser の有無で
  * HTML パーサーを決める。Workers にはどちらも無いため、defuddle の評価より先に linkedom の
@@ -11,7 +20,7 @@ export async function extractMarkdown({
 }: {
   html: string;
   url: string;
-}): Promise<{ title: string; markdown: string } | null> {
+}): Promise<ExtractedArticle | null> {
   const hadWindow = 'window' in globalThis;
   const previousWindow = (globalThis as Record<string, unknown>).window;
   const hadDomParser = 'DOMParser' in globalThis;
@@ -25,7 +34,14 @@ export async function extractMarkdown({
     const result = new Defuddle(document, { url, markdown: true }).parse();
 
     if (!result.content?.trim()) return null;
-    return { title: result.title ?? '', markdown: result.content };
+    return {
+      title: result.title ?? '',
+      markdown: result.content,
+      description: emptyToUndefined(result.description),
+      author: emptyToUndefined(result.author),
+      published: emptyToUndefined(result.published),
+      image: emptyToUndefined(result.image),
+    };
   } catch (err) {
     console.error(`Defuddle extraction failed for ${url}:`, err);
     return null;
@@ -33,6 +49,12 @@ export async function extractMarkdown({
     restoreGlobal('window', hadWindow, previousWindow);
     restoreGlobal('DOMParser', hadDomParser, previousDomParser);
   }
+}
+
+// defuddle は見つからなかった項目を空文字で返す
+function emptyToUndefined(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 function restoreGlobal(key: string, existed: boolean, value: unknown): void {

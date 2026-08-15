@@ -1,5 +1,5 @@
 import { extractMarkdown } from './article-extractor';
-import { sanitizeForFrontmatter } from './frontmatter-sanitizer';
+import { normalizeMetaText } from './meta-text';
 
 // Bot 判定で 403 を返すサイトがあるため、通常のブラウザとして名乗る。
 // マイナー以下を 0.0.0 にし、macOS のバージョンを 10_15_7 に固定するのは
@@ -12,6 +12,7 @@ type Article = {
   title: string;
   description?: string;
   author?: string;
+  published?: string;
   image?: string;
   markdown: string;
 };
@@ -57,6 +58,7 @@ export function resolveTitle({
   url: string;
 }): string {
   const candidates = [
+    isXPost(url) ? extractLeadingHeading(markdown) : undefined,
     extractOgpMeta(html, 'og:title'),
     extractedTitle,
     extractHtmlTitle(html),
@@ -85,12 +87,13 @@ export async function fetchArticleMarkdown({
   const extracted = await extractMarkdown({ html, url });
   if (!extracted) return null;
 
-  const description = extractOgpMeta(html, 'og:description');
-  const author = extractOgpMeta(html, 'article:author');
+  const description =
+    extracted.description ?? extractOgpMeta(html, 'og:description');
+  const author = resolveAuthor({ extractedAuthor: extracted.author, html });
 
   return {
     url,
-    title: sanitizeForFrontmatter(
+    title: normalizeMetaText(
       resolveTitle({
         html,
         extractedTitle: extracted.title,
@@ -98,9 +101,11 @@ export async function fetchArticleMarkdown({
         url,
       }),
     ),
-    description: description ? sanitizeForFrontmatter(description) : undefined,
-    author: author ? sanitizeForFrontmatter(author) : undefined,
-    image: extractOgpMeta(html, 'og:image'),
+    description: description ? normalizeMetaText(description) : undefined,
+    author: author ? normalizeMetaText(author) : undefined,
+    published:
+      extracted.published ?? extractOgpMeta(html, 'article:published_time'),
+    image: extracted.image ?? extractOgpMeta(html, 'og:image'),
     markdown: extracted.markdown,
   };
 }
@@ -125,6 +130,59 @@ async function fetchHtml({
     console.error(`Failed to fetch HTML for ${url}:`, err);
     return null;
   }
+}
+
+function resolveAuthor({
+  extractedAuthor,
+  html,
+}: {
+  extractedAuthor?: string;
+  html: string;
+}): string | undefined {
+  const candidate =
+    extractedAuthor?.trim() || extractOgpMeta(html, 'article:author')?.trim();
+  return candidate ? toAuthorName(candidate) : undefined;
+}
+
+// article:author にプロフィールページの URL を入れるサイトがあるため、その場合は末尾の
+// セグメントを名前として扱う。frontmatter 側でリンクにするので URL のままだと使えない
+function toAuthorName(value: string): string {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return value;
+    }
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    return segments[segments.length - 1] ?? parsed.hostname;
+  } catch {
+    return value;
+  }
+}
+
+function isXPost(url: string): boolean {
+  try {
+    const { hostname } = new URL(url);
+    return (
+      hostname === 'x.com' ||
+      hostname === 'twitter.com' ||
+      hostname.endsWith('.x.com') ||
+      hostname.endsWith('.twitter.com')
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * X はどの投稿でも og:title が「表示名 (@ハンドル) on X」になり、投稿の内容を含まない。
+ * 本文の先頭行が記事見出しとして抽出されるので、そちらをタイトルに使う。
+ */
+function extractLeadingHeading(markdown: string): string | undefined {
+  const firstLine = markdown.split('\n').find((line) => line.trim());
+  const match = firstLine
+    ?.trim()
+    .match(/^(?:[-*+][ \t]+|\d+\.[ \t]+)?#{1,6}[ \t]+(.+)$/);
+  return match?.[1].trim();
 }
 
 function getAttribute(tag: string, name: string): string | undefined {
